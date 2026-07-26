@@ -3,21 +3,27 @@ const { prepare, transaction } = require('../db');
 
 const router = express.Router();
 
-// 验证设备是否已绑定
-function getDeviceUserId(deviceId) {
+// 设备上报：自动注册，无需手动绑定
+function autoBindDevice(deviceId) {
   const device = prepare('SELECT user_id FROM devices WHERE device_id = ?').get(deviceId);
-  return device ? device.user_id : null;
+  if (device) return device.user_id;
+
+  const firstUser = prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1').get();
+  if (!firstUser) return null;
+
+  prepare('INSERT INTO devices (device_id, device_name, user_id, bind_code) VALUES (?, ?, ?, ?)')
+    .run(deviceId, '学习机', firstUser.id, 'auto');
+  return firstUser.id;
 }
 
-// 设备上报前验证绑定
 function checkDevice(req, res, next) {
   const { deviceId } = req.body;
   if (!deviceId) {
     return res.status(400).json({ error: '缺少 deviceId' });
   }
-  const userId = getDeviceUserId(deviceId);
+  const userId = autoBindDevice(deviceId);
   if (!userId) {
-    return res.status(403).json({ error: '设备未绑定，请先在家长端绑定' });
+    return res.status(200).json({ message: 'ok', note: '请先在网页注册账号' });
   }
   req.deviceUserId = userId;
   next();
