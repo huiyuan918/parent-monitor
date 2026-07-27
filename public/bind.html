@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>绑定设备</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f5f6f8;
+      color: #222;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .panel {
+      width: min(460px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, .08);
+    }
+    h1 { margin: 0 0 10px; font-size: 22px; }
+    p { margin: 8px 0; color: #666; font-size: 14px; line-height: 1.6; }
+    label { display: block; margin: 14px 0 6px; font-size: 14px; color: #444; }
+    input {
+      width: 100%;
+      height: 40px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 0 10px;
+      font-size: 15px;
+    }
+    button {
+      width: 100%;
+      height: 42px;
+      border: 0;
+      border-radius: 6px;
+      margin-top: 18px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .65; cursor: default; }
+    .msg { margin-top: 12px; font-size: 14px; min-height: 20px; }
+    .error { color: #dc2626; }
+    .ok { color: #15803d; }
+    .links { margin-top: 16px; font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
+    a { color: #2563eb; text-decoration: none; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>绑定设备</h1>
+    <p>先在手机上打开“系统环境”，页面底部会显示设备ID。把设备ID填到这里，绑定码填 <code>918918</code>。</p>
+    <form id="form">
+      <label for="deviceId">设备ID</label>
+      <input id="deviceId" autocomplete="off" required />
+
+      <label for="deviceName">设备名称</label>
+      <input id="deviceName" placeholder="例如：学习机 / 手机" />
+
+      <label for="bindCode">绑定码</label>
+      <input id="bindCode" inputmode="numeric" value="918918" required />
+
+      <button id="submit" type="submit">绑定到当前账号</button>
+      <div id="msg" class="msg"></div>
+    </form>
+    <div class="links">
+      <a href="/dashboard">返回总览</a>
+      <a href="/focus.html">重点监测</a>
+      <a href="/logout.html">退出登录</a>
+    </div>
+  </main>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) location.href = '/';
+
+    const form = document.getElementById('form');
+    const submit = document.getElementById('submit');
+    const msg = document.getElementById('msg');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      msg.className = 'msg';
+      msg.textContent = '';
+      submit.disabled = true;
+
+      try {
+        const res = await fetch('/api/auth/bind-device', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            deviceId: document.getElementById('deviceId').value.trim(),
+            deviceName: document.getElementById('deviceName').value.trim() || '设备',
+            bindCode: document.getElementById('bindCode').value.trim(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '绑定失败');
+        msg.className = 'msg ok';
+        msg.textContent = data.message || '绑定成功';
+      } catch (err) {
+        msg.className = 'msg error';
+        msg.textContent = err.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

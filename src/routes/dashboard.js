@@ -180,4 +180,19 @@ router.get('/miniprogram-usage', (req, res) => {
   });
 });
 
+// 清空某台设备某一天的记录
+router.delete('/day-data', (req, res) => {
+  const { deviceId, date } = req.body;
+  if (!deviceId || !date) return res.status(400).json({ error: '缺少 deviceId 或 date' });
+
+  const device = prepare('SELECT device_id FROM devices WHERE device_id = ? AND user_id = ?').get(deviceId, req.userId);
+  if (!device) return res.status(404).json({ error: '设备不存在或不属于当前账号' });
+
+  prepare('DELETE FROM app_usage WHERE device_id = ? AND date(start_time) = ?').run(deviceId, date);
+  prepare('DELETE FROM web_history WHERE device_id = ? AND date(visited_at) = ?').run(deviceId, date);
+  prepare('DELETE FROM miniprogram_usage WHERE device_id = ? AND date(start_time) = ?').run(deviceId, date);
+
+  res.json({ message: '当天记录已清空' });
+});
+
 module.exports = router;

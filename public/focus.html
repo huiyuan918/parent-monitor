@@ -12,7 +12,8 @@
     nav { display: flex; gap: 12px; flex-wrap: wrap; }
     main { max-width: 980px; margin: 0 auto; padding: 16px; }
     .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-    select, input { height: 38px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 10px; background: #fff; }
+    select, input, button { height: 38px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 10px; background: #fff; }
+    button { color: #dc2626; cursor: pointer; }
     .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
     .card h2 { margin: 0 0 10px; font-size: 16px; }
@@ -31,6 +32,7 @@
     <h1>重点监测</h1>
     <nav>
       <a href="/dashboard">返回总览</a>
+      <a href="/bind.html">绑定设备</a>
       <a href="/reset.html">找回密码</a>
       <a href="/logout.html">退出登录</a>
     </nav>
@@ -39,6 +41,7 @@
     <div class="toolbar">
       <select id="device"></select>
       <input id="date" type="date" />
+      <button id="clearDay" type="button">清空当天记录</button>
     </div>
     <div class="grid">
       <section class="card">
@@ -68,6 +71,7 @@
 
     const deviceEl = document.getElementById('device');
     const dateEl = document.getElementById('date');
+    const clearDayEl = document.getElementById('clearDay');
     dateEl.value = new Date().toISOString().slice(0, 10);
 
     function format(seconds) {
@@ -83,6 +87,23 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '请求失败');
       return data;
+    }
+
+    async function clearDayData() {
+      const deviceId = deviceEl.value;
+      const date = dateEl.value;
+      if (!deviceId || !date) return;
+      if (!confirm(`确定清空 ${date} 这一天的记录吗？清空后不能恢复。`)) return;
+
+      const res = await fetch(`${api}/dashboard/day-data`, {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({ deviceId, date }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '清空失败');
+      alert(data.message || '已清空');
+      loadData();
     }
 
     function renderList(id, items, type) {
@@ -140,6 +161,7 @@
       }
       deviceEl.addEventListener('change', loadData);
       dateEl.addEventListener('change', loadData);
+      clearDayEl.addEventListener('click', () => clearDayData().catch((err) => alert(err.message)));
       loadData();
     }
 

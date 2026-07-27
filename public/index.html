@@ -16,11 +16,18 @@
           var topbar = document.querySelector('.topbar');
           if (!topbar || document.getElementById('logout-link')) return;
 
+          var bindLink = document.createElement('a');
+          bindLink.id = 'bind-link';
+          bindLink.href = '/bind.html';
+          bindLink.textContent = '绑定设备';
+          bindLink.style.cssText = 'margin-left:12px;color:#2563eb;text-decoration:none;font-size:14px;';
+
           var link = document.createElement('a');
           link.id = 'logout-link';
           link.href = '/logout.html';
           link.textContent = '退出登录';
           link.style.cssText = 'margin-left:12px;color:#666;text-decoration:none;font-size:14px;';
+          topbar.appendChild(bindLink);
           topbar.appendChild(link);
         }
 
