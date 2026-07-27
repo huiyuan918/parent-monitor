@@ -24,11 +24,28 @@
           topbar.appendChild(link);
         }
 
-        new MutationObserver(addLogoutButton).observe(document.documentElement, {
+        function addResetLink() {
+          var loginCard = document.querySelector('.login-card');
+          if (!loginCard || document.getElementById('reset-link')) return;
+
+          var link = document.createElement('a');
+          link.id = 'reset-link';
+          link.href = '/reset.html';
+          link.textContent = '忘记密码？';
+          link.style.cssText = 'display:block;margin-top:14px;text-align:center;color:#666;text-decoration:none;font-size:14px;';
+          loginCard.appendChild(link);
+        }
+
+        function updateLinks() {
+          addLogoutButton();
+          addResetLink();
+        }
+
+        new MutationObserver(updateLinks).observe(document.documentElement, {
           childList: true,
           subtree: true
         });
-        addLogoutButton();
+        updateLinks();
       })();
     </script>
   </body>
