@@ -10,5 +10,26 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        function addLogoutButton() {
+          var topbar = document.querySelector('.topbar');
+          if (!topbar || document.getElementById('logout-link')) return;
+
+          var link = document.createElement('a');
+          link.id = 'logout-link';
+          link.href = '/logout.html';
+          link.textContent = '退出登录';
+          link.style.cssText = 'margin-left:12px;color:#666;text-decoration:none;font-size:14px;';
+          topbar.appendChild(link);
+        }
+
+        new MutationObserver(addLogoutButton).observe(document.documentElement, {
+          childList: true,
+          subtree: true
+        });
+        addLogoutButton();
+      })();
+    </script>
   </body>
 </html>
