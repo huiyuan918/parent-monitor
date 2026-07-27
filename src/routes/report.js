@@ -24,7 +24,7 @@ function checkDevice(req, res, next) {
   }
   const userId = autoBindDevice(deviceId);
   if (!userId) {
-    return res.status(200).json({ message: 'ok', note: '请先在网页注册账号' });
+    return res.status(409).json({ error: '请先在网页注册账号' });
   }
   req.deviceUserId = userId;
   next();
