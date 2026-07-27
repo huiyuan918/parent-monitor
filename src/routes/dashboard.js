@@ -1,6 +1,7 @@
 const express = require('express');
 const { prepare } = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { normalizeRecord } = require('../appClassifier');
 
 const router = express.Router();
 
@@ -27,13 +28,17 @@ router.get('/overview', (req, res) => {
     WHERE device_id = ? AND date(start_time) = ?
   `).get(targetDeviceId, targetDate);
 
-  const categories = prepare(`
-    SELECT category, COALESCE(SUM(duration_seconds), 0) as total_seconds
+  const appRows = prepare(`
+    SELECT app_name, package_name, category, duration_seconds
     FROM app_usage
     WHERE device_id = ? AND date(start_time) = ?
-    GROUP BY category
-    ORDER BY total_seconds DESC
   `).all(targetDeviceId, targetDate);
+  const categories = Object.values(appRows.reduce((acc, row) => {
+    const category = normalizeRecord(row).category;
+    if (!acc[category]) acc[category] = { category, total_seconds: 0 };
+    acc[category].total_seconds += row.duration_seconds || 0;
+    return acc;
+  }, {})).sort((a, b) => b.total_seconds - a.total_seconds);
 
   const mpTotal = prepare(`
     SELECT COALESCE(SUM(duration_seconds), 0) as total
@@ -73,14 +78,14 @@ router.get('/app-usage', (req, res) => {
     WHERE device_id = ? AND date(start_time) = ?
     ORDER BY start_time DESC
     LIMIT ? OFFSET ?
-  `).all(deviceId, targetDate, parseInt(pageSize), offset);
+  `).all(deviceId, targetDate, parseInt(pageSize), offset).map(normalizeRecord);
 
   const total = prepare(`
     SELECT COUNT(*) as count FROM app_usage
     WHERE device_id = ? AND date(start_time) = ?
   `).get(deviceId, targetDate);
 
-  const summary = prepare(`
+  const summaryRows = prepare(`
     SELECT app_name, package_name, category,
            COALESCE(SUM(duration_seconds), 0) as total_seconds,
            COUNT(*) as session_count
@@ -89,6 +94,7 @@ router.get('/app-usage', (req, res) => {
     GROUP BY package_name
     ORDER BY total_seconds DESC
   `).all(deviceId, targetDate);
+  const summary = summaryRows.map(normalizeRecord);
 
   res.json({
     records, summary,

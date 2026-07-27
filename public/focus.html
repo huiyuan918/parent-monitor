@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>重点监测 - 游戏 / 小说 / 短剧</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f6f8; color: #222; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 14px 18px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    h1 { margin: 0; font-size: 18px; }
+    main { max-width: 980px; margin: 0 auto; padding: 16px; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    select, input { height: 38px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 10px; background: #fff; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
+    .card h2 { margin: 0 0 10px; font-size: 16px; }
+    .empty { color: #888; font-size: 14px; padding: 18px 0; }
+    .item { border-top: 1px solid #f0f1f3; padding: 10px 0; }
+    .item:first-of-type { border-top: 0; }
+    .name { font-weight: 600; margin-bottom: 4px; }
+    .meta { color: #666; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+    .pkg { color: #999; font-size: 12px; overflow-wrap: anywhere; margin-top: 4px; }
+    a { color: #2563eb; text-decoration: none; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>重点监测</h1>
+    <a href="/dashboard">返回总览</a>
+  </header>
+  <main>
+    <div class="toolbar">
+      <select id="device"></select>
+      <input id="date" type="date" />
+    </div>
+    <div class="grid">
+      <section class="card">
+        <h2>游戏</h2>
+        <div id="games" class="empty">加载中...</div>
+      </section>
+      <section class="card">
+        <h2>小说</h2>
+        <div id="novels" class="empty">加载中...</div>
+      </section>
+      <section class="card">
+        <h2>网盘学习</h2>
+        <div id="netdiskStudy" class="empty">加载中...</div>
+      </section>
+      <section class="card">
+        <h2>微信短剧</h2>
+        <div id="dramas" class="empty">加载中...</div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const api = '/api';
+    const token = localStorage.getItem('token');
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    const dramaWords = ['短剧', '剧场', '追剧', '全集', '下一集', '选集'];
+
+    const deviceEl = document.getElementById('device');
+    const dateEl = document.getElementById('date');
+    dateEl.value = new Date().toISOString().slice(0, 10);
+
+    function format(seconds) {
+      const s = Number(seconds || 0);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      return h ? `${h}小时${m}分钟` : `${m}分钟`;
+    }
+
+    async function request(path) {
+      if (!token) location.href = '/';
+      const res = await fetch(api + path, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '请求失败');
+      return data;
+    }
+
+    function renderList(id, items, type) {
+      const el = document.getElementById(id);
+      if (!items.length) {
+        el.className = 'empty';
+        el.textContent = '暂无记录';
+        return;
+      }
+      el.className = '';
+      el.innerHTML = items.map((item) => `
+        <div class="item">
+          <div class="name">${item.name}</div>
+          <div class="meta"><span>${format(item.seconds)}</span><span>${item.count} 次</span></div>
+          ${type === 'app' && item.packageName ? `<div class="pkg">${item.packageName}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function loadData() {
+      const deviceId = deviceEl.value;
+      const date = dateEl.value;
+      if (!deviceId || !date) return;
+
+      renderList('games', [], 'app');
+      renderList('novels', [], 'app');
+      renderList('netdiskStudy', [], 'mp');
+      renderList('dramas', [], 'mp');
+
+      const app = await request(`/dashboard/app-usage?deviceId=${encodeURIComponent(deviceId)}&date=${date}`);
+      const mp = await request(`/dashboard/miniprogram-usage?deviceId=${encodeURIComponent(deviceId)}&date=${date}`);
+
+      const toAppItem = (x) => ({ name: x.app_name, packageName: x.package_name, seconds: x.total_seconds, count: x.session_count });
+      const toMpItem = (x) => ({ name: x.program_name, seconds: x.total_seconds, count: x.visit_count });
+      const miniPrograms = mp.summary || [];
+      const netdiskGames = miniPrograms.filter((x) => x.program_name.startsWith('百度网盘-游戏-'));
+      const netdiskStudy = miniPrograms.filter((x) => x.program_name.startsWith('百度网盘-学习-'));
+      const dramas = miniPrograms.filter((x) => dramaWords.some((word) => x.program_name.includes(word)));
+
+      renderList('games', [
+        ...(app.summary || []).filter((x) => x.category === '游戏').map(toAppItem),
+        ...netdiskGames.map(toMpItem),
+      ], 'app');
+      renderList('novels', (app.summary || []).filter((x) => x.category === '小说').map(toAppItem), 'app');
+      renderList('netdiskStudy', netdiskStudy.map(toMpItem), 'mp');
+      renderList('dramas', dramas.map(toMpItem), 'mp');
+    }
+
+    async function init() {
+      const devices = await request('/auth/devices');
+      deviceEl.innerHTML = devices.map((d) => `<option value="${d.device_id}">${d.device_name}</option>`).join('');
+      if (!devices.length) {
+        document.querySelector('main').innerHTML = '<div class="card empty">还没有绑定设备</div>';
+        return;
+      }
+      deviceEl.addEventListener('change', loadData);
+      dateEl.addEventListener('change', loadData);
+      loadData();
+    }
+
+    init().catch((err) => {
+      document.querySelector('main').innerHTML = `<div class="card empty">${err.message}</div>`;
+    });
+  </script>
+</body>
+</html>

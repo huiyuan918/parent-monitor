@@ -1,5 +1,6 @@
 const express = require('express');
 const { prepare, transaction } = require('../db');
+const { classifyApp } = require('../appClassifier');
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.post('/app-usage', checkDevice, (req, res) => {
         INSERT INTO app_usage (device_id, package_name, app_name, category, start_time, end_time, duration_seconds)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
-        deviceId, r.packageName, r.appName, r.category || '其他',
+        deviceId, r.packageName, r.appName, classifyApp(r.packageName, r.appName, r.category),
         r.startTime, r.endTime, r.durationSeconds
       );
     }
