@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>注册账号</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f5f6f8;
+      color: #222;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .panel {
+      width: min(420px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, .08);
+    }
+    h1 { margin: 0 0 18px; font-size: 22px; }
+    label { display: block; margin: 14px 0 6px; font-size: 14px; color: #444; }
+    input {
+      width: 100%;
+      height: 40px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 0 10px;
+      font-size: 15px;
+    }
+    button {
+      width: 100%;
+      height: 42px;
+      border: 0;
+      border-radius: 6px;
+      margin-top: 18px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .65; cursor: default; }
+    .msg { margin-top: 12px; font-size: 14px; min-height: 20px; }
+    .error { color: #dc2626; }
+    .links { margin-top: 16px; font-size: 14px; }
+    a { color: #2563eb; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>注册家长账号</h1>
+    <form id="form">
+      <label for="username">用户名</label>
+      <input id="username" autocomplete="username" required />
+
+      <label for="password">密码</label>
+      <input id="password" type="password" autocomplete="new-password" minlength="6" required />
+
+      <label for="confirmPassword">确认密码</label>
+      <input id="confirmPassword" type="password" autocomplete="new-password" minlength="6" required />
+
+      <button id="submit" type="submit">注册并登录</button>
+      <div id="msg" class="msg"></div>
+    </form>
+    <div class="links"><a href="/">已有账号？返回登录</a></div>
+  </main>
+
+  <script>
+    const form = document.getElementById('form');
+    const submit = document.getElementById('submit');
+    const msg = document.getElementById('msg');
+
+    async function request(path, body) {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '请求失败');
+      return data;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+
+      msg.className = 'msg';
+      msg.textContent = '';
+      if (password !== confirmPassword) {
+        msg.className = 'msg error';
+        msg.textContent = '两次输入的密码不一致';
+        return;
+      }
+
+      submit.disabled = true;
+      try {
+        await request('/api/auth/register', { username, password });
+        const login = await request('/api/auth/login', { username, password });
+        localStorage.setItem('token', login.token);
+        location.href = '/dashboard';
+      } catch (err) {
+        msg.className = 'msg error';
+        msg.textContent = err.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

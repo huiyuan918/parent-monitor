@@ -26,19 +26,40 @@
 
         function addResetLink() {
           var loginCard = document.querySelector('.login-card');
-          if (!loginCard || document.getElementById('reset-link')) return;
+          if (!loginCard || document.getElementById('register-link')) return;
 
-          var link = document.createElement('a');
-          link.id = 'reset-link';
-          link.href = '/reset.html';
-          link.textContent = '忘记密码？';
-          link.style.cssText = 'display:block;margin-top:14px;text-align:center;color:#666;text-decoration:none;font-size:14px;';
-          loginCard.appendChild(link);
+          var links = document.createElement('div');
+          links.style.cssText = 'display:flex;justify-content:center;gap:18px;margin-top:14px;';
+
+          var registerLink = document.createElement('a');
+          registerLink.id = 'register-link';
+          registerLink.href = '/register.html';
+          registerLink.textContent = '注册账号';
+          registerLink.style.cssText = 'color:#2563eb;text-decoration:none;font-size:14px;';
+
+          var resetLink = document.createElement('a');
+          resetLink.id = 'reset-link';
+          resetLink.href = '/reset.html';
+          resetLink.textContent = '忘记密码？';
+          resetLink.style.cssText = 'color:#666;text-decoration:none;font-size:14px;';
+
+          links.appendChild(registerLink);
+          links.appendChild(resetLink);
+          loginCard.appendChild(links);
+        }
+
+        function hideLegacyRegisterSwitch() {
+          var loginCard = document.querySelector('.login-card');
+          if (!loginCard) return;
+          loginCard.querySelectorAll('.switch').forEach(function (node) {
+            node.style.display = 'none';
+          });
         }
 
         function updateLinks() {
           addLogoutButton();
           addResetLink();
+          hideLegacyRegisterSwitch();
         }
 
         new MutationObserver(updateLinks).observe(document.documentElement, {
