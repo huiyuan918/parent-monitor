@@ -87,7 +87,9 @@ router.get('/me', authMiddleware, (req, res) => {
 
 // 绑定设备
 router.post('/bind-device', authMiddleware, (req, res) => {
-  const { deviceId, deviceName, bindCode } = req.body;
+  const deviceId = String(req.body.deviceId || '').trim();
+  const deviceName = String(req.body.deviceName || '').trim();
+  const bindCode = String(req.body.bindCode || '').trim();
   if (!deviceId || !bindCode) return res.status(400).json({ error: '参数不完整' });
   if (bindCode !== (process.env.BIND_CODE || '918918')) return res.status(403).json({ error: '绑定码错误' });
 

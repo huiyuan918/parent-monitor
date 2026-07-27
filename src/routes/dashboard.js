@@ -7,6 +7,10 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
+function todayInShanghai() {
+  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 // 仪表盘总览
 router.get('/overview', (req, res) => {
   const { deviceId, date } = req.query;
@@ -20,7 +24,7 @@ router.get('/overview', (req, res) => {
   }
 
   const targetDeviceId = devices[0].device_id;
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || todayInShanghai();
 
   const todayTotal = prepare(`
     SELECT COALESCE(SUM(duration_seconds), 0) as total
@@ -69,7 +73,7 @@ router.get('/app-usage', (req, res) => {
   const { deviceId, date, page = 1, pageSize = 50 } = req.query;
   if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
 
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || todayInShanghai();
   const offset = (parseInt(page) - 1) * parseInt(pageSize);
 
   const records = prepare(`
@@ -124,7 +128,7 @@ router.get('/web-history', (req, res) => {
   const { deviceId, date, page = 1, pageSize = 50 } = req.query;
   if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
 
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || todayInShanghai();
   const offset = (parseInt(page) - 1) * parseInt(pageSize);
 
   const records = prepare(`
@@ -148,7 +152,7 @@ router.get('/miniprogram-usage', (req, res) => {
   const { deviceId, date, page = 1, pageSize = 50 } = req.query;
   if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
 
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || todayInShanghai();
   const offset = (parseInt(page) - 1) * parseInt(pageSize);
 
   const records = prepare(`
