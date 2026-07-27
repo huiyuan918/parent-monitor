@@ -54,6 +54,30 @@ router.post('/login', (req, res) => {
   res.json({ message: '登录成功', token, userId: user.id, username });
 });
 
+// 找回密码：使用服务器重置码
+router.post('/reset-password', (req, res) => {
+  const { username, resetCode, newPassword } = req.body;
+  if (!username || !resetCode || !newPassword) {
+    return res.status(400).json({ error: '用户名、重置码和新密码不能为空' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: '密码至少6位' });
+  }
+
+  const expectedCode = process.env.RESET_CODE || process.env.BIND_CODE || '918918';
+  if (resetCode !== expectedCode) {
+    return res.status(403).json({ error: '重置码错误' });
+  }
+
+  const user = prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!user) {
+    return res.status(404).json({ error: '用户不存在' });
+  }
+
+  prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword), user.id);
+  res.json({ message: '密码已重置' });
+});
+
 // 获取当前用户信息
 router.get('/me', authMiddleware, (req, res) => {
   const user = prepare('SELECT id, username, created_at FROM users WHERE id = ?').get(req.userId);
