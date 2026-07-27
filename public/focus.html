@@ -9,6 +9,7 @@
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f6f8; color: #222; }
     header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 14px 18px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     h1 { margin: 0; font-size: 18px; }
+    nav { display: flex; gap: 12px; flex-wrap: wrap; }
     main { max-width: 980px; margin: 0 auto; padding: 16px; }
     .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
     select, input { height: 38px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 10px; background: #fff; }
@@ -28,7 +29,11 @@
 <body>
   <header>
     <h1>重点监测</h1>
-    <a href="/dashboard">返回总览</a>
+    <nav>
+      <a href="/dashboard">返回总览</a>
+      <a href="/reset.html">找回密码</a>
+      <a href="/logout.html">退出登录</a>
+    </nav>
   </header>
   <main>
     <div class="toolbar">
