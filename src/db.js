@@ -151,6 +151,7 @@ function initTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_id TEXT NOT NULL,
       program_name TEXT NOT NULL,
+      category TEXT DEFAULT '其他',
       start_time DATETIME NOT NULL,
       end_time DATETIME,
       duration_seconds INTEGER DEFAULT 0,
@@ -158,6 +159,7 @@ function initTables() {
       FOREIGN KEY (device_id) REFERENCES devices(device_id)
     )
   `);
+  ensureColumn('miniprogram_usage', 'category', "TEXT DEFAULT '其他'");
   exec('CREATE INDEX IF NOT EXISTS idx_mp_usage_device ON miniprogram_usage(device_id, start_time)');
 
   exec(`
@@ -170,6 +172,13 @@ function initTables() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+}
+
+function ensureColumn(table, column, definition) {
+  const columns = prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((item) => item.name === column)) {
+    exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 module.exports = { getDb, saveDb, prepare, exec, transaction };

@@ -153,7 +153,7 @@ router.get('/miniprogram-usage', (req, res) => {
   const offset = (parseInt(page) - 1) * parseInt(pageSize);
 
   const records = prepare(`
-    SELECT program_name, start_time, end_time, duration_seconds
+    SELECT program_name, category, start_time, end_time, duration_seconds
     FROM miniprogram_usage
     WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
     ORDER BY start_time DESC
@@ -166,12 +166,12 @@ router.get('/miniprogram-usage', (req, res) => {
   `).get(deviceId, targetDate);
 
   const summary = prepare(`
-    SELECT program_name,
+    SELECT program_name, category,
            COALESCE(SUM(duration_seconds), 0) as total_seconds,
            COUNT(*) as visit_count
     FROM miniprogram_usage
     WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
-    GROUP BY program_name
+    GROUP BY program_name, category
     ORDER BY total_seconds DESC
   `).all(deviceId, targetDate);
 

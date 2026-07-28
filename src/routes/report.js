@@ -5,6 +5,15 @@ const { normalizeReportedTime } = require('../time');
 
 const router = express.Router();
 
+function classifyMiniProgram(programName = '', category = '') {
+  const text = `${programName} ${category}`;
+  if (/短剧|剧场|追剧|全集|第\d+集|继续播放|下一集|选集/.test(text)) return '短剧';
+  if (/小说|阅读|书城|书架|章节|第\d+章|听书|电子书|txt|epub|mobi|番茄|七猫|起点|掌阅|书旗|晋江|纵横|红袖/i.test(text)) return '小说';
+  if (/游戏|game|手游|安装包|apk|mod|王者|和平精英|原神|崩坏|明日方舟|蛋仔|第五人格|迷你世界|我的世界|roblox|minecraft/i.test(text)) return '游戏';
+  if (/学习|课程|网课|课堂|作业|试卷|真题|教材|英语|数学|语文|物理|化学|生物/.test(text)) return '学习';
+  return category || '其他';
+}
+
 // 设备上报：自动注册，无需手动绑定
 function autoBindDevice(deviceId) {
   const device = prepare('SELECT user_id FROM devices WHERE device_id = ?').get(deviceId);
@@ -108,11 +117,12 @@ router.post('/miniprogram-usage', checkDevice, (req, res) => {
     for (const r of items) {
       const programName = String(r.programName || '').trim();
       if (!programName) continue;
+      const category = classifyMiniProgram(programName, String(r.category || '').trim());
       prepare(`
-        INSERT INTO miniprogram_usage (device_id, program_name, start_time, end_time, duration_seconds)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO miniprogram_usage (device_id, program_name, category, start_time, end_time, duration_seconds)
+        VALUES (?, ?, ?, ?, ?, ?)
       `).run(
-        deviceId, programName, normalizeReportedTime(r.startTime),
+        deviceId, programName, category, normalizeReportedTime(r.startTime),
         r.endTime ? normalizeReportedTime(r.endTime) : null, Number(r.durationSeconds || 0)
       );
       inserted += 1;

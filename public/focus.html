@@ -146,15 +146,19 @@
       const toAppItem = (x) => ({ name: x.app_name, packageName: x.package_name, seconds: x.total_seconds, count: x.session_count });
       const toMpItem = (x) => ({ name: x.program_name, seconds: x.total_seconds, count: x.visit_count });
       const miniPrograms = mp.summary || [];
-      const netdiskGames = miniPrograms.filter((x) => x.program_name.startsWith('百度网盘-游戏-'));
-      const netdiskStudy = miniPrograms.filter((x) => x.program_name.startsWith('百度网盘-学习-'));
-      const dramas = miniPrograms.filter((x) => dramaWords.some((word) => x.program_name.includes(word)));
+      const miniGames = miniPrograms.filter((x) => x.category === '游戏');
+      const netdiskStudy = miniPrograms.filter((x) => x.category === '学习' && x.program_name.startsWith('百度网盘-'));
+      const miniNovels = miniPrograms.filter((x) => x.category === '小说');
+      const dramas = miniPrograms.filter((x) => x.category === '短剧' || dramaWords.some((word) => x.program_name.includes(word)));
 
       renderList('games', [
         ...(app.summary || []).filter((x) => x.category === '游戏').map(toAppItem),
-        ...netdiskGames.map(toMpItem),
+        ...miniGames.map(toMpItem),
       ], 'app');
-      renderList('novels', (app.summary || []).filter((x) => x.category === '小说').map(toAppItem), 'app');
+      renderList('novels', [
+        ...(app.summary || []).filter((x) => x.category === '小说').map(toAppItem),
+        ...miniNovels.map(toMpItem),
+      ], 'app');
       renderList('netdiskStudy', netdiskStudy.map(toMpItem), 'mp');
       renderList('dramas', dramas.map(toMpItem), 'mp');
     }
