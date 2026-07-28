@@ -17,3 +17,5 @@ services:
         value: 918918
       - key: DB_PATH
         value: /var/data/data.db
+      - key: LEGACY_DB_PATH
+        value: /tmp/data.db

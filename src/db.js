@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data.db');
+const LEGACY_DB_PATH = process.env.LEGACY_DB_PATH || '/tmp/data.db';
 
 let db = null;
 let SQL = null;
@@ -11,6 +12,7 @@ async function getDb() {
   if (db) return db;
 
   SQL = await initSqlJs();
+  restoreLegacyDbIfNeeded();
 
   if (fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH);
@@ -31,6 +33,16 @@ function saveDb() {
     const data = db.export();
     fs.writeFileSync(DB_PATH, Buffer.from(data));
   }
+}
+
+function restoreLegacyDbIfNeeded() {
+  if (fs.existsSync(DB_PATH)) return;
+  if (DB_PATH === LEGACY_DB_PATH) return;
+  if (!fs.existsSync(LEGACY_DB_PATH)) return;
+
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  fs.copyFileSync(LEGACY_DB_PATH, DB_PATH);
+  console.log(`Restored database from legacy path ${LEGACY_DB_PATH} to ${DB_PATH}`);
 }
 
 // -- sql.js 包装函数，提供类似 better-sqlite3 的 API --
