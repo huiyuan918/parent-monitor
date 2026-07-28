@@ -2,14 +2,11 @@ const express = require('express');
 const { prepare } = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { normalizeRecord } = require('../appClassifier');
+const { todayInShanghai, shanghaiDateExpr } = require('../time');
 
 const router = express.Router();
 
 router.use(authMiddleware);
-
-function todayInShanghai() {
-  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
 
 // 仪表盘总览
 router.get('/overview', (req, res) => {
@@ -29,13 +26,13 @@ router.get('/overview', (req, res) => {
   const todayTotal = prepare(`
     SELECT COALESCE(SUM(duration_seconds), 0) as total
     FROM app_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
   `).get(targetDeviceId, targetDate);
 
   const appRows = prepare(`
     SELECT app_name, package_name, category, duration_seconds
     FROM app_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
   `).all(targetDeviceId, targetDate);
   const categories = Object.values(appRows.reduce((acc, row) => {
     const category = normalizeRecord(row).category;
@@ -47,12 +44,12 @@ router.get('/overview', (req, res) => {
   const mpTotal = prepare(`
     SELECT COALESCE(SUM(duration_seconds), 0) as total
     FROM miniprogram_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
   `).get(targetDeviceId, targetDate);
 
   const webCount = prepare(`
     SELECT COUNT(*) as count FROM web_history
-    WHERE device_id = ? AND date(visited_at) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('visited_at')} = ?
   `).get(targetDeviceId, targetDate);
 
   res.json({
@@ -79,14 +76,14 @@ router.get('/app-usage', (req, res) => {
   const records = prepare(`
     SELECT app_name, package_name, category, start_time, end_time, duration_seconds
     FROM app_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
     ORDER BY start_time DESC
     LIMIT ? OFFSET ?
   `).all(deviceId, targetDate, parseInt(pageSize), offset).map(normalizeRecord);
 
   const total = prepare(`
     SELECT COUNT(*) as count FROM app_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
   `).get(deviceId, targetDate);
 
   const summaryRows = prepare(`
@@ -94,7 +91,7 @@ router.get('/app-usage', (req, res) => {
            COALESCE(SUM(duration_seconds), 0) as total_seconds,
            COUNT(*) as session_count
     FROM app_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
     GROUP BY package_name
     ORDER BY total_seconds DESC
   `).all(deviceId, targetDate);
@@ -112,11 +109,11 @@ router.get('/app-trend', (req, res) => {
   if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
 
   const trend = prepare(`
-    SELECT date(start_time) as day,
+    SELECT ${shanghaiDateExpr('start_time')} as day,
            COALESCE(SUM(duration_seconds), 0) as total_seconds
     FROM app_usage
-    WHERE device_id = ? AND start_time >= datetime('now', '-' || ? || ' days')
-    GROUP BY date(start_time)
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} >= date('now', '+8 hours', '-' || ? || ' days')
+    GROUP BY ${shanghaiDateExpr('start_time')}
     ORDER BY day ASC
   `).all(deviceId, parseInt(days));
 
@@ -134,14 +131,14 @@ router.get('/web-history', (req, res) => {
   const records = prepare(`
     SELECT url, title, browser, visited_at
     FROM web_history
-    WHERE device_id = ? AND date(visited_at) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('visited_at')} = ?
     ORDER BY visited_at DESC
     LIMIT ? OFFSET ?
   `).all(deviceId, targetDate, parseInt(pageSize), offset);
 
   const total = prepare(`
     SELECT COUNT(*) as count FROM web_history
-    WHERE device_id = ? AND date(visited_at) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('visited_at')} = ?
   `).get(deviceId, targetDate);
 
   res.json({ records, total: total.count, page: parseInt(page), pageSize: parseInt(pageSize) });
@@ -158,14 +155,14 @@ router.get('/miniprogram-usage', (req, res) => {
   const records = prepare(`
     SELECT program_name, start_time, end_time, duration_seconds
     FROM miniprogram_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
     ORDER BY start_time DESC
     LIMIT ? OFFSET ?
   `).all(deviceId, targetDate, parseInt(pageSize), offset);
 
   const total = prepare(`
     SELECT COUNT(*) as count FROM miniprogram_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
   `).get(deviceId, targetDate);
 
   const summary = prepare(`
@@ -173,7 +170,7 @@ router.get('/miniprogram-usage', (req, res) => {
            COALESCE(SUM(duration_seconds), 0) as total_seconds,
            COUNT(*) as visit_count
     FROM miniprogram_usage
-    WHERE device_id = ? AND date(start_time) = ?
+    WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
     GROUP BY program_name
     ORDER BY total_seconds DESC
   `).all(deviceId, targetDate);
@@ -192,9 +189,9 @@ router.delete('/day-data', (req, res) => {
   const device = prepare('SELECT device_id FROM devices WHERE device_id = ? AND user_id = ?').get(deviceId, req.userId);
   if (!device) return res.status(404).json({ error: '设备不存在或不属于当前账号' });
 
-  prepare('DELETE FROM app_usage WHERE device_id = ? AND date(start_time) = ?').run(deviceId, date);
-  prepare('DELETE FROM web_history WHERE device_id = ? AND date(visited_at) = ?').run(deviceId, date);
-  prepare('DELETE FROM miniprogram_usage WHERE device_id = ? AND date(start_time) = ?').run(deviceId, date);
+  prepare(`DELETE FROM app_usage WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?`).run(deviceId, date);
+  prepare(`DELETE FROM web_history WHERE device_id = ? AND ${shanghaiDateExpr('visited_at')} = ?`).run(deviceId, date);
+  prepare(`DELETE FROM miniprogram_usage WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?`).run(deviceId, date);
 
   res.json({ message: '当天记录已清空' });
 });

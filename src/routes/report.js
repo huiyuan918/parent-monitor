@@ -1,6 +1,7 @@
 const express = require('express');
 const { prepare, transaction } = require('../db');
 const { classifyApp } = require('../appClassifier');
+const { normalizeReportedTime } = require('../time');
 
 const router = express.Router();
 
@@ -38,25 +39,32 @@ router.post('/app-usage', checkDevice, (req, res) => {
   }
 
   const insert = transaction((items) => {
+    let inserted = 0;
     for (const r of items) {
+      const appName = String(r.appName || '').trim();
+      const packageName = String(r.packageName || '').trim();
+      if (!appName && !packageName) continue;
+
       prepare(`
         INSERT INTO app_usage (device_id, package_name, app_name, category, start_time, end_time, duration_seconds)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
-        deviceId, r.packageName, r.appName, classifyApp(r.packageName, r.appName, r.category),
-        r.startTime, r.endTime, r.durationSeconds
+        deviceId, packageName, appName || packageName, classifyApp(packageName, appName, r.category),
+        normalizeReportedTime(r.startTime), normalizeReportedTime(r.endTime), Number(r.durationSeconds || 0)
       );
+      inserted += 1;
     }
+    return inserted;
   });
 
-  insert(records);
+  const insertedCount = insert(records);
 
   prepare('INSERT INTO sync_log (device_id, sync_type, record_count) VALUES (?, ?, ?)')
-    .run(deviceId, 'app_usage', records.length);
+    .run(deviceId, 'app_usage', insertedCount);
 
   prepare('UPDATE devices SET last_online = CURRENT_TIMESTAMP WHERE device_id = ?').run(deviceId);
 
-  res.json({ message: 'ok', count: records.length });
+  res.json({ message: 'ok', count: insertedCount, skipped: records.length - insertedCount });
 });
 
 // 上报网页浏览记录（批量）
@@ -67,20 +75,25 @@ router.post('/web-history', checkDevice, (req, res) => {
   }
 
   const insert = transaction((items) => {
+    let inserted = 0;
     for (const r of items) {
+      const url = String(r.url || '').trim();
+      if (!url) continue;
       prepare('INSERT INTO web_history (device_id, url, title, browser, visited_at) VALUES (?, ?, ?, ?, ?)')
-        .run(deviceId, r.url, r.title || '', r.browser || '未知浏览器', r.visitedAt);
+        .run(deviceId, url, r.title || '', r.browser || '未知浏览器', normalizeReportedTime(r.visitedAt));
+      inserted += 1;
     }
+    return inserted;
   });
 
-  insert(records);
+  const insertedCount = insert(records);
 
   prepare('INSERT INTO sync_log (device_id, sync_type, record_count) VALUES (?, ?, ?)')
-    .run(deviceId, 'web_history', records.length);
+    .run(deviceId, 'web_history', insertedCount);
 
   prepare('UPDATE devices SET last_online = CURRENT_TIMESTAMP WHERE device_id = ?').run(deviceId);
 
-  res.json({ message: 'ok', count: records.length });
+  res.json({ message: 'ok', count: insertedCount, skipped: records.length - insertedCount });
 });
 
 // 上报微信小程序使用记录（批量）
@@ -91,22 +104,30 @@ router.post('/miniprogram-usage', checkDevice, (req, res) => {
   }
 
   const insert = transaction((items) => {
+    let inserted = 0;
     for (const r of items) {
+      const programName = String(r.programName || '').trim();
+      if (!programName) continue;
       prepare(`
         INSERT INTO miniprogram_usage (device_id, program_name, start_time, end_time, duration_seconds)
         VALUES (?, ?, ?, ?, ?)
-      `).run(deviceId, r.programName, r.startTime, r.endTime || null, r.durationSeconds || 0);
+      `).run(
+        deviceId, programName, normalizeReportedTime(r.startTime),
+        r.endTime ? normalizeReportedTime(r.endTime) : null, Number(r.durationSeconds || 0)
+      );
+      inserted += 1;
     }
+    return inserted;
   });
 
-  insert(records);
+  const insertedCount = insert(records);
 
   prepare('INSERT INTO sync_log (device_id, sync_type, record_count) VALUES (?, ?, ?)')
-    .run(deviceId, 'miniprogram_usage', records.length);
+    .run(deviceId, 'miniprogram_usage', insertedCount);
 
   prepare('UPDATE devices SET last_online = CURRENT_TIMESTAMP WHERE device_id = ?').run(deviceId);
 
-  res.json({ message: 'ok', count: records.length });
+  res.json({ message: 'ok', count: insertedCount, skipped: records.length - insertedCount });
 });
 
 // 心跳/设备在线

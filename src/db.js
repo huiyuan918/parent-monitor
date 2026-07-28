@@ -82,9 +82,10 @@ function transaction(fn) {
   return (...args) => {
     db.run('BEGIN');
     try {
-      fn(...args);
+      const result = fn(...args);
       db.run('COMMIT');
       saveDb();
+      return result;
     } catch (e) {
       db.run('ROLLBACK');
       throw e;
