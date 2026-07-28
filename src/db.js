@@ -27,6 +27,7 @@ async function getDb() {
 
 function saveDb() {
   if (db) {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     const data = db.export();
     fs.writeFileSync(DB_PATH, Buffer.from(data));
   }

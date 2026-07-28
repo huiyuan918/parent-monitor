@@ -4,6 +4,10 @@ services:
     env: node
     buildCommand: npm install
     startCommand: node src/index.js
+    disk:
+      name: app-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PORT
         value: 3000
@@ -12,4 +16,4 @@ services:
       - key: BIND_CODE
         value: 918918
       - key: DB_PATH
-        value: /tmp/data.db
+        value: /var/data/data.db
