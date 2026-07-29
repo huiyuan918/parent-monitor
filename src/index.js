@@ -40,7 +40,9 @@ app.use((err, _req, res, _next) => {
 });
 
 const { getDb } = require('./db');
-getDb().then(() => {
+const { migrateFromPostgresIfNeeded } = require('./migratePostgres');
+
+migrateFromPostgresIfNeeded().then(() => getDb()).then(() => {
   console.log('DB ready');
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
