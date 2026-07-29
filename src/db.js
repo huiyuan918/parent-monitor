@@ -1,15 +1,27 @@
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
+const { AsyncLocalStorage } = require('async_hooks');
+const { Pool } = require('pg');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data.db');
 const LEGACY_DB_PATH = process.env.LEGACY_DB_PATH || '/tmp/data.db';
+const USE_POSTGRES = Boolean(process.env.DATABASE_URL);
 
 let db = null;
 let SQL = null;
+let pool = null;
 let transactionDepth = 0;
+const transactionStore = new AsyncLocalStorage();
 
 async function getDb() {
+  if (USE_POSTGRES) {
+    if (pool) return pool;
+    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    await initTables();
+    return pool;
+  }
+
   if (db) return db;
 
   SQL = await initSqlJs();
@@ -23,21 +35,20 @@ async function getDb() {
   }
 
   db.run('PRAGMA foreign_keys = ON');
-  initTables();
+  await initTables();
   saveDb();
   return db;
 }
 
 function saveDb() {
-  if (db) {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    const data = db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
-  }
+  if (!db) return;
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  const data = db.export();
+  fs.writeFileSync(DB_PATH, Buffer.from(data));
 }
 
 function saveDbIfNeeded() {
-  if (transactionDepth === 0) saveDb();
+  if (!USE_POSTGRES && transactionDepth === 0) saveDb();
 }
 
 function restoreLegacyDbIfNeeded() {
@@ -50,16 +61,35 @@ function restoreLegacyDbIfNeeded() {
   console.log(`Restored database from legacy path ${LEGACY_DB_PATH} to ${DB_PATH}`);
 }
 
-// -- sql.js 包装函数，提供类似 better-sqlite3 的 API --
+function translatePlaceholders(sql) {
+  let index = 0;
+  return sql.replace(/\?/g, () => `$${++index}`);
+}
+
+async function pgQuery(sql, params = []) {
+  const client = transactionStore.getStore() || pool;
+  const result = await client.query(translatePlaceholders(sql), params);
+  return result;
+}
 
 function prepare(sql) {
   return {
-    run: (...params) => {
+    run: async (...params) => {
+      if (USE_POSTGRES) {
+        const result = await pgQuery(sql, params);
+        return { changes: result.rowCount };
+      }
+
       db.run(sql, params);
       saveDbIfNeeded();
       return { changes: db.getRowsModified() };
     },
-    get: (...params) => {
+    get: async (...params) => {
+      if (USE_POSTGRES) {
+        const result = await pgQuery(sql, params);
+        return result.rows[0] || null;
+      }
+
       const stmt = db.prepare(sql);
       if (params.length) stmt.bind(params);
       let row = null;
@@ -72,7 +102,12 @@ function prepare(sql) {
       stmt.free();
       return row;
     },
-    all: (...params) => {
+    all: async (...params) => {
+      if (USE_POSTGRES) {
+        const result = await pgQuery(sql, params);
+        return result.rows;
+      }
+
       const stmt = db.prepare(sql);
       if (params.length) stmt.bind(params);
       const rows = [];
@@ -89,20 +124,39 @@ function prepare(sql) {
   };
 }
 
-function exec(sql) {
+async function exec(sql) {
+  if (USE_POSTGRES) {
+    await pgQuery(sql);
+    return;
+  }
+
   db.run(sql);
   saveDbIfNeeded();
 }
 
-// 事务支持
 function transaction(fn) {
-  return (...args) => {
+  return async (...args) => {
+    if (USE_POSTGRES) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await transactionStore.run(client, () => fn(...args));
+        await client.query('COMMIT');
+        return result;
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
+
     if (transactionDepth > 0) return fn(...args);
 
     db.run('BEGIN');
     transactionDepth += 1;
     try {
-      const result = fn(...args);
+      const result = await fn(...args);
       db.run('COMMIT');
       transactionDepth -= 1;
       saveDb();
@@ -118,8 +172,93 @@ function transaction(fn) {
   };
 }
 
-function initTables() {
-  exec(`
+async function initTables() {
+  if (USE_POSTGRES) {
+    await initPostgresTables();
+  } else {
+    await initSqliteTables();
+  }
+}
+
+async function initPostgresTables() {
+  await exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS devices (
+      id SERIAL PRIMARY KEY,
+      device_name TEXT NOT NULL,
+      device_id TEXT UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      bind_code TEXT NOT NULL,
+      last_online TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS app_usage (
+      id SERIAL PRIMARY KEY,
+      device_id TEXT NOT NULL REFERENCES devices(device_id),
+      package_name TEXT NOT NULL,
+      app_name TEXT NOT NULL,
+      category TEXT DEFAULT '其他',
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      duration_seconds INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await exec('CREATE INDEX IF NOT EXISTS idx_app_usage_device ON app_usage(device_id, start_time)');
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS web_history (
+      id SERIAL PRIMARY KEY,
+      device_id TEXT NOT NULL REFERENCES devices(device_id),
+      url TEXT NOT NULL,
+      title TEXT,
+      browser TEXT,
+      visited_at TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await exec('CREATE INDEX IF NOT EXISTS idx_web_history_device ON web_history(device_id, visited_at)');
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS miniprogram_usage (
+      id SERIAL PRIMARY KEY,
+      device_id TEXT NOT NULL REFERENCES devices(device_id),
+      program_name TEXT NOT NULL,
+      category TEXT DEFAULT '其他',
+      start_time TEXT NOT NULL,
+      end_time TEXT,
+      duration_seconds INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await ensureColumn('miniprogram_usage', 'category', "TEXT DEFAULT '其他'");
+  await exec('CREATE INDEX IF NOT EXISTS idx_mp_usage_device ON miniprogram_usage(device_id, start_time)');
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS sync_log (
+      id SERIAL PRIMARY KEY,
+      device_id TEXT NOT NULL,
+      sync_type TEXT NOT NULL,
+      record_count INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'ok',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+async function initSqliteTables() {
+  await exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -128,7 +267,7 @@ function initTables() {
     )
   `);
 
-  exec(`
+  await exec(`
     CREATE TABLE IF NOT EXISTS devices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_name TEXT NOT NULL,
@@ -141,7 +280,7 @@ function initTables() {
     )
   `);
 
-  exec(`
+  await exec(`
     CREATE TABLE IF NOT EXISTS app_usage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_id TEXT NOT NULL,
@@ -155,9 +294,9 @@ function initTables() {
       FOREIGN KEY (device_id) REFERENCES devices(device_id)
     )
   `);
-  exec('CREATE INDEX IF NOT EXISTS idx_app_usage_device ON app_usage(device_id, start_time)');
+  await exec('CREATE INDEX IF NOT EXISTS idx_app_usage_device ON app_usage(device_id, start_time)');
 
-  exec(`
+  await exec(`
     CREATE TABLE IF NOT EXISTS web_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_id TEXT NOT NULL,
@@ -169,9 +308,9 @@ function initTables() {
       FOREIGN KEY (device_id) REFERENCES devices(device_id)
     )
   `);
-  exec('CREATE INDEX IF NOT EXISTS idx_web_history_device ON web_history(device_id, visited_at)');
+  await exec('CREATE INDEX IF NOT EXISTS idx_web_history_device ON web_history(device_id, visited_at)');
 
-  exec(`
+  await exec(`
     CREATE TABLE IF NOT EXISTS miniprogram_usage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_id TEXT NOT NULL,
@@ -184,10 +323,10 @@ function initTables() {
       FOREIGN KEY (device_id) REFERENCES devices(device_id)
     )
   `);
-  ensureColumn('miniprogram_usage', 'category', "TEXT DEFAULT '其他'");
-  exec('CREATE INDEX IF NOT EXISTS idx_mp_usage_device ON miniprogram_usage(device_id, start_time)');
+  await ensureColumn('miniprogram_usage', 'category', "TEXT DEFAULT '其他'");
+  await exec('CREATE INDEX IF NOT EXISTS idx_mp_usage_device ON miniprogram_usage(device_id, start_time)');
 
-  exec(`
+  await exec(`
     CREATE TABLE IF NOT EXISTS sync_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       device_id TEXT NOT NULL,
@@ -199,11 +338,25 @@ function initTables() {
   `);
 }
 
-function ensureColumn(table, column, definition) {
-  const columns = prepare(`PRAGMA table_info(${table})`).all();
+async function ensureColumn(table, column, definition) {
+  if (USE_POSTGRES) {
+    const existing = await prepare(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = ? AND column_name = ?
+    `).get(table, column);
+    if (!existing) await exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    return;
+  }
+
+  const columns = await prepare(`PRAGMA table_info(${table})`).all();
   if (!columns.some((item) => item.name === column)) {
-    exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    await exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 }
 
-module.exports = { getDb, saveDb, prepare, exec, transaction };
+function isPostgres() {
+  return USE_POSTGRES;
+}
+
+module.exports = { getDb, saveDb, prepare, exec, transaction, isPostgres };

@@ -46,6 +46,16 @@ function todayInShanghai() {
 }
 
 function shanghaiDateExpr(column) {
+  if (process.env.DATABASE_URL) {
+    return `
+      CASE
+        WHEN ${column} ~ '(Z|[+-][0-9]{2}:?[0-9]{2})$'
+        THEN DATE((${column})::timestamptz AT TIME ZONE 'Asia/Shanghai')
+        ELSE DATE((${column})::timestamp)
+      END
+    `;
+  }
+
   return `
     CASE
       WHEN substr(${column}, -1) = 'Z'

@@ -1,13 +1,15 @@
+databases:
+  - name: parent-monitor-db
+    databaseName: parent_monitor
+    user: parent_monitor
+    plan: basic-256mb
+
 services:
   - type: web
     name: parent-monitor
     env: node
     buildCommand: npm install
     startCommand: node src/index.js
-    disk:
-      name: app-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PORT
         value: 3000
@@ -15,7 +17,7 @@ services:
         generateValue: true
       - key: BIND_CODE
         value: 918918
-      - key: DB_PATH
-        value: /var/data/data.db
-      - key: LEGACY_DB_PATH
-        value: /tmp/data.db
+      - key: DATABASE_URL
+        fromDatabase:
+          name: parent-monitor-db
+          property: connectionString
