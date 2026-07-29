@@ -111,7 +111,7 @@ router.get('/app-usage', asyncHandler(async (req, res) => {
            COUNT(*) as session_count
     FROM app_usage
     WHERE device_id = ? AND ${shanghaiDateExpr('start_time')} = ?
-    GROUP BY package_name
+    GROUP BY package_name, app_name, category
     ORDER BY total_seconds DESC
   `).all(deviceId, targetDate);
   const summary = summaryRows.map((row) => ({
