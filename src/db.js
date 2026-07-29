@@ -63,7 +63,32 @@ function restoreLegacyDbIfNeeded() {
 
 function translatePlaceholders(sql) {
   let index = 0;
-  return sql.replace(/\?/g, () => `$${++index}`);
+  let output = '';
+  let inSingleQuote = false;
+
+  for (let i = 0; i < sql.length; i += 1) {
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    output += char;
+
+    if (char === "'" && inSingleQuote && next === "'") {
+      output += next;
+      i += 1;
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    if (char === '?' && !inSingleQuote) {
+      output = `${output.slice(0, -1)}$${++index}`;
+    }
+  }
+
+  return output;
 }
 
 async function pgQuery(sql, params = []) {
