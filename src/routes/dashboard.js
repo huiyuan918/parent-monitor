@@ -8,6 +8,22 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
+function getOwnedDeviceId(req, res) {
+  const deviceId = String(req.query.deviceId || '').trim();
+  if (!deviceId) {
+    res.status(400).json({ error: '缺少 deviceId' });
+    return null;
+  }
+
+  const device = prepare('SELECT device_id FROM devices WHERE device_id = ? AND user_id = ?').get(deviceId, req.userId);
+  if (!device) {
+    res.status(404).json({ error: '设备不存在或不属于当前账号' });
+    return null;
+  }
+
+  return device.device_id;
+}
+
 // 仪表盘总览
 router.get('/overview', (req, res) => {
   const { deviceId, date } = req.query;
@@ -67,8 +83,9 @@ router.get('/overview', (req, res) => {
 
 // 应用使用详情
 router.get('/app-usage', (req, res) => {
-  const { deviceId, date, page = 1, pageSize = 50 } = req.query;
-  if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
+  const { date, page = 1, pageSize = 50 } = req.query;
+  const deviceId = getOwnedDeviceId(req, res);
+  if (!deviceId) return;
 
   const targetDate = date || todayInShanghai();
   const offset = (parseInt(page) - 1) * parseInt(pageSize);
@@ -105,8 +122,9 @@ router.get('/app-usage', (req, res) => {
 
 // 应用使用趋势
 router.get('/app-trend', (req, res) => {
-  const { deviceId, days = 7 } = req.query;
-  if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
+  const { days = 7 } = req.query;
+  const deviceId = getOwnedDeviceId(req, res);
+  if (!deviceId) return;
 
   const trend = prepare(`
     SELECT ${shanghaiDateExpr('start_time')} as day,
@@ -122,8 +140,9 @@ router.get('/app-trend', (req, res) => {
 
 // 网页浏览历史
 router.get('/web-history', (req, res) => {
-  const { deviceId, date, page = 1, pageSize = 50 } = req.query;
-  if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
+  const { date, page = 1, pageSize = 50 } = req.query;
+  const deviceId = getOwnedDeviceId(req, res);
+  if (!deviceId) return;
 
   const targetDate = date || todayInShanghai();
   const offset = (parseInt(page) - 1) * parseInt(pageSize);
@@ -146,8 +165,9 @@ router.get('/web-history', (req, res) => {
 
 // 微信小程序使用记录
 router.get('/miniprogram-usage', (req, res) => {
-  const { deviceId, date, page = 1, pageSize = 50 } = req.query;
-  if (!deviceId) return res.status(400).json({ error: '缺少 deviceId' });
+  const { date, page = 1, pageSize = 50 } = req.query;
+  const deviceId = getOwnedDeviceId(req, res);
+  if (!deviceId) return;
 
   const targetDate = date || todayInShanghai();
   const offset = (parseInt(page) - 1) * parseInt(pageSize);

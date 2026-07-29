@@ -7,6 +7,7 @@ const LEGACY_DB_PATH = process.env.LEGACY_DB_PATH || '/tmp/data.db';
 
 let db = null;
 let SQL = null;
+let transactionDepth = 0;
 
 async function getDb() {
   if (db) return db;
@@ -35,6 +36,10 @@ function saveDb() {
   }
 }
 
+function saveDbIfNeeded() {
+  if (transactionDepth === 0) saveDb();
+}
+
 function restoreLegacyDbIfNeeded() {
   if (fs.existsSync(DB_PATH)) return;
   if (DB_PATH === LEGACY_DB_PATH) return;
@@ -51,7 +56,7 @@ function prepare(sql) {
   return {
     run: (...params) => {
       db.run(sql, params);
-      saveDb();
+      saveDbIfNeeded();
       return { changes: db.getRowsModified() };
     },
     get: (...params) => {
@@ -86,20 +91,28 @@ function prepare(sql) {
 
 function exec(sql) {
   db.run(sql);
-  saveDb();
+  saveDbIfNeeded();
 }
 
 // 事务支持
 function transaction(fn) {
   return (...args) => {
+    if (transactionDepth > 0) return fn(...args);
+
     db.run('BEGIN');
+    transactionDepth += 1;
     try {
       const result = fn(...args);
       db.run('COMMIT');
+      transactionDepth -= 1;
       saveDb();
       return result;
     } catch (e) {
-      db.run('ROLLBACK');
+      try {
+        db.run('ROLLBACK');
+      } finally {
+        transactionDepth -= 1;
+      }
       throw e;
     }
   };
